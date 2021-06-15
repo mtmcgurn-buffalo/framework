@@ -15,6 +15,8 @@
 #include "mesh/mesh.hpp"
 #include "solve/solvable.hpp"
 
+
+
 namespace ablate::flow {
 
 class Flow : public solve::Solvable, public monitors::Viewable {
@@ -25,11 +27,26 @@ class Flow : public solve::Solvable, public monitors::Viewable {
     // descriptions to the fields on the auxDM
     std::vector<FlowFieldDescriptor> auxFieldDescriptors;
 
+    // store a map for easy field lookup
+    struct CompareCharArray
+    {
+        bool operator()(char const *a, char const *b) const
+        {
+            return std::strcmp(a, b) < 0;
+        }
+    };
+    // FieldLocation
+    struct FieldLocation
+    {
+        PetscInt index;
+        DM dm;
+        Vec vec;
+        bool isGlobalVector;
+    };
+    std::map<const char*, FieldLocation, CompareCharArray> fieldLocations;
+
     static PetscErrorCode TSPreStepFunction(TS ts);
     static PetscErrorCode TSPostStepFunction(TS ts);
-
-   public:
-    static void UpdateAuxFields(TS ts, Flow& flow);
 
    protected:
     const std::string name;
@@ -48,6 +65,7 @@ class Flow : public solve::Solvable, public monitors::Viewable {
     std::vector<std::function<void(TS ts, Flow&)>> preStepFunctions;
     std::vector<std::function<void(TS ts, Flow&)>> postStepFunctions;
 
+    /** initialization and update functions **/
     const std::vector<std::shared_ptr<mathFunctions::FieldSolution>> initialization;
     const std::vector<std::shared_ptr<boundaryConditions::BoundaryCondition>> boundaryConditions;
     const std::vector<std::shared_ptr<mathFunctions::FieldSolution>> auxiliaryFieldsUpdaters;
@@ -73,6 +91,9 @@ class Flow : public solve::Solvable, public monitors::Viewable {
     virtual void CompleteProblemSetup(TS ts);
     virtual void CompleteFlowInitialization(DM, Vec) = 0;
 
+    /** Function to update the aux fields in the TS **/
+    static void UpdateAuxFields(TS ts, Flow& flow);
+
     /**
      * provide interface for all flow output
      * @param viewer
@@ -94,6 +115,18 @@ class Flow : public solve::Solvable, public monitors::Viewable {
      */
     void RegisterPostStep(std::function<void(TS ts, Flow&)> postStep) { this->postStepFunctions.push_back(postStep); }
 
+    /**
+     * Function to get a subvector of a specific field (solution or aux)
+     * @return
+     */
+    PetscErrorCode  GetSubVector(const char* fieldName, DM* vecDM, Vec* locSubVec, PetscReal time);
+
+    /**
+     * Function to return/restore a subvector of a specific field (solution or aux)
+     * @return
+     */
+    PetscErrorCode  RestoreSubVector(DM* vecDM, Vec* locSubVec);
+
     const std::string& GetName() const override { return name; }
 
     const DM& GetDM() const { return dm->GetDomain(); }
@@ -109,6 +142,10 @@ class Flow : public solve::Solvable, public monitors::Viewable {
     std::optional<int> GetFieldId(const std::string& fieldName) const;
 
     std::optional<int> GetAuxFieldId(const std::string& fieldName) const;
+
+    std::optional<int> GetFieldId(const char* fieldName) const;
+
+    std::optional<int> GetAuxFieldId(const char* fieldName) const;
 };
 }  // namespace ablate::flow
 

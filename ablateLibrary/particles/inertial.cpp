@@ -76,14 +76,12 @@ PetscErrorCode ablate::particles::Inertial::RHSFunction(TS ts, PetscReal t, Vec 
 
     ablate::particles::Inertial *particles = (ablate::particles::Inertial *)ctx;
 
-    Vec u = particles->flowFinal;
     DM sdm, dm, vdm;
-    Vec vel, locvel, fluidVelocity;
+    Vec locvel, fluidVelocity;
     IS vis;
     DMInterpolationInfo ictx;
     const PetscScalar *coords;
     PetscScalar *f;
-    PetscInt vf[1] = {particles->flowVelocityFieldIndex};
     PetscInt dim, Np;
     PetscErrorCode ierr;
 
@@ -102,21 +100,7 @@ PetscErrorCode ablate::particles::Inertial::RHSFunction(TS ts, PetscReal t, Vec 
     CHKERRQ(ierr);
 
     /* Get local fluid velocity */
-    ierr = DMCreateSubDM(dm, 1, vf, &vis, &vdm);
-    CHKERRQ(ierr);
-    ierr = VecGetSubVector(u, vis, &vel);
-    CHKERRQ(ierr);
-    ierr = DMGetLocalVector(vdm, &locvel);
-    CHKERRQ(ierr);
-    ierr = DMPlexInsertBoundaryValues(vdm, PETSC_TRUE, locvel, particles->timeInitial, NULL, NULL, NULL);
-    CHKERRQ(ierr);
-    ierr = DMGlobalToLocalBegin(vdm, vel, INSERT_VALUES, locvel);
-    CHKERRQ(ierr);
-    ierr = DMGlobalToLocalEnd(vdm, vel, INSERT_VALUES, locvel);
-    CHKERRQ(ierr);
-    ierr = VecRestoreSubVector(u, vis, &vel);
-    CHKERRQ(ierr);
-    ierr = ISDestroy(&vis);
+    ierr = particles->flow->GetSubVector("velocity", &vdm, &locvel, particles->timeInitial);
     CHKERRQ(ierr);
 
     /* Interpolate velocity */
@@ -159,9 +143,7 @@ PetscErrorCode ablate::particles::Inertial::RHSFunction(TS ts, PetscReal t, Vec 
     CHKERRQ(ierr);
     ierr = DMInterpolationDestroy(&ictx);
     CHKERRQ(ierr);
-    ierr = DMRestoreLocalVector(vdm, &locvel);
-    CHKERRQ(ierr);
-    ierr = DMDestroy(&vdm);
+    ierr = particles->flow->RestoreSubVector(&vdm, &locvel);
     CHKERRQ(ierr);
 
     // Calculate RHS of particle position and velocity equations

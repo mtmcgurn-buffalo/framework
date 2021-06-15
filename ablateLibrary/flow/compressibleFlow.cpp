@@ -5,7 +5,8 @@
 #include "utilities/petscError.hpp"
 
 static const char* compressibleFlowComponentNames[TOTAL_COMPRESSIBLE_FLOW_COMPONENTS + 1] = {"rho", "rhoE", "rhoU", "rhoV", "rhoW", "unknown"};
-static const char* compressibleAuxComponentNames[TOTAL_COMPRESSIBLE_AUX_COMPONENTS + 1] = {"T", "vel", "unknown"};
+static const char* compressibleAuxComponentNames[TOTAL_COMPRESSIBLE_AUX_COMPONENTS + 1] = {"temperature", "velocity", "unknown"};
+static const char* compressibleAuxComponentPrefixes[TOTAL_COMPRESSIBLE_AUX_COMPONENTS + 1] = {"T", "vel", "unknown"};
 
 static PetscErrorCode UpdateAuxTemperatureField(FlowData_CompressibleFlow flowParameters, PetscReal time, PetscInt dim, const PetscFVCellGeom* cellGeom, const PetscScalar* conservedValues,
                                                 PetscScalar* auxField) {
@@ -13,7 +14,7 @@ static PetscErrorCode UpdateAuxTemperatureField(FlowData_CompressibleFlow flowPa
     PetscReal density = conservedValues[RHO];
     PetscReal totalEnergy = conservedValues[RHOE] / density;
 
-    PetscErrorCode ierr = flowParameters->computeTemperatureFunction(NULL, dim, density, totalEnergy, conservedValues + RHOU, &auxField[T], flowParameters->computeTemperatureContext);
+    PetscErrorCode ierr = flowParameters->computeTemperatureFunction(NULL, dim, density, totalEnergy, conservedValues + RHOU, &auxField[0], flowParameters->computeTemperatureContext);
     CHKERRQ(ierr);
 
     PetscFunctionReturn(0);
@@ -78,8 +79,8 @@ ablate::flow::CompressibleFlow::CompressibleFlow(std::string name, std::shared_p
     }
     FinalizeRegisterFields();
 
-    RegisterAuxField({.fieldName = compressibleAuxComponentNames[T], .fieldPrefix = compressibleAuxComponentNames[T], .components = 1, .fieldType = FieldType::FV});
-    RegisterAuxField({.fieldName = compressibleAuxComponentNames[VEL], .fieldPrefix = compressibleAuxComponentNames[VEL], .components = dim, .fieldType = FieldType::FV});
+    RegisterAuxField({.fieldName = compressibleAuxComponentNames[T], .fieldPrefix = compressibleAuxComponentPrefixes[T], .components = 1, .fieldType = FieldType::FV});
+    RegisterAuxField({.fieldName = compressibleAuxComponentNames[VEL], .fieldPrefix = compressibleAuxComponentPrefixes[VEL], .components = dim, .fieldType = FieldType::FV});
 
     // Start problem setup
     PetscDS prob;
@@ -191,18 +192,19 @@ PetscErrorCode ablate::flow::CompressibleFlow::CompressibleFlowRHSFunctionLocal(
     ierr = DMPlexTSComputeRHSFunctionFVM(dm, time, locXVec, globFVec, &flow->compressibleFlowData);
     CHKERRQ(ierr);
 
+    // update any aux fields
+    ierr = FVFlowUpdateAuxFieldsFV(flow->dm->GetDomain(), flow->auxDM, time, locXVec, flow->auxField, TOTAL_COMPRESSIBLE_AUX_COMPONENTS, flow->auxFieldUpdateFunctions, flow->compressibleFlowData);
+    CHKERRQ(ierr);
+
     // if there are any coefficients for diffusion, compute diffusion
     if (flow->compressibleFlowData->k || flow->compressibleFlowData->mu) {
-        // update any aux fields
-        ierr = FVFlowUpdateAuxFieldsFV(flow->dm->GetDomain(), flow->auxDM, time, locXVec, flow->auxField, TOTAL_COMPRESSIBLE_AUX_COMPONENTS, flow->auxFieldUpdateFunctions, flow->compressibleFlowData);
-        CHKERRQ(ierr);
-
         // compute the RHS sources
         ierr = CompressibleFlowDiffusionSourceRHSFunctionLocal(dm, flow->auxDM, time, locXVec, flow->auxField, globFVec, flow->compressibleFlowData);
         CHKERRQ(ierr);
     }
 
     PetscFunctionReturn(0);
+
 }
 
 void ablate::flow::CompressibleFlow::CompleteProblemSetup(TS ts) {

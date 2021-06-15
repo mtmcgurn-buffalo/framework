@@ -27,9 +27,7 @@ class Particles : public monitors::Viewable {
     PetscReal timeFinal;   /* The time for uf, at the end of the advection solve */
 
     // flow coupling data
-    PetscInt flowVelocityFieldIndex;
-    Vec flowInitial; /* The PDE solution field at ti */
-    Vec flowFinal;   /* The PDE solution field at tf */
+    std::shared_ptr<ablate::flow::Flow> flow;
 
     // all fields stored in the particle domain
     std::vector<particles::ParticleFieldDescriptor> particleFieldDescriptors;

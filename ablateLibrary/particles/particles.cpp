@@ -68,10 +68,7 @@ void ablate::particles::Particles::InitializeFlow(std::shared_ptr<flow::Flow> fl
     DMSwarmSetCellDM(dm, flow->GetDM()) >> checkError;
 
     // Store the values in the particles from the ts and flow
-    flowFinal = flow->GetSolutionVector();
-    VecDuplicate(flowFinal, &(flowInitial)) >> checkError;
-    VecCopy(flow->GetSolutionVector(), flowInitial) >> checkError;
-    flowVelocityFieldIndex = flow->GetFieldId("velocity").value();
+    this->flow = flow;
 
     // name the particle domain
     auto namePrefix = name + "_";
@@ -114,9 +111,6 @@ ablate::particles::Particles::~Particles() {
     }
     if (particleTs) {
         TSDestroy(&particleTs) >> checkError;
-    }
-    if (flowInitial) {
-        VecDestroy(&flowInitial) >> checkError;
     }
     if (petscOptions) {
         ablate::utilities::PetscOptionsDestroyAndCheck(name, &petscOptions);
@@ -267,10 +261,8 @@ PetscErrorCode ablate::particles::Particles::ComputeParticleError(TS particleTS,
     VecRestoreArrayWrite(exactLocationVec, &exactLocationArray) >> checkError;
 
     // Get all points still in this mesh
-    DM flowDM;
-    VecGetDM(particles->flowFinal, &flowDM) >> checkError;
     PetscSF cellSF = NULL;
-    DMLocatePoints(flowDM, exactLocationVec, DM_POINTLOCATION_NONE, &cellSF) >> checkError;
+    DMLocatePoints(particles->flow->GetDM(), exactLocationVec, DM_POINTLOCATION_NONE, &cellSF) >> checkError;
     const PetscSFNode *cells;
     PetscSFGetGraph(cellSF, NULL, NULL, NULL, &cells) >> checkError;
 
@@ -482,8 +474,6 @@ void ablate::particles::Particles::AdvectParticles(TS flowTS) {
 
     // take the needed timesteps to get to the flow time
     TSSolve(particleTs, solutionVector) >> checkError;
-
-    VecCopy(flowFinal, flowInitial) >> checkError;
     timeInitial = timeFinal;
 
     // get the updated time step, and reset if it has gone down

@@ -31,14 +31,11 @@ void ablate::particles::Tracer::InitializeFlow(std::shared_ptr<flow::Flow> flow)
 */
 PetscErrorCode ablate::particles::Tracer::freeStreaming(TS ts, PetscReal t, Vec X, Vec F, void *ctx) {
     ablate::particles::Tracer *particles = (ablate::particles::Tracer *)ctx;
-    Vec u = particles->flowFinal;
     DM sdm, dm, vdm;
-    Vec vel, locvel, pvel;
-    IS vis;
+    Vec locvel, pvel;
     DMInterpolationInfo ictx;
     const PetscScalar *coords, *v;
     PetscScalar *f;
-    PetscInt vf[1] = {particles->flowVelocityFieldIndex};
     PetscInt dim, Np;
     PetscErrorCode ierr;
 
@@ -55,21 +52,7 @@ PetscErrorCode ablate::particles::Tracer::freeStreaming(TS ts, PetscReal t, Vec 
     CHKERRQ(ierr);
 
     /* Get local velocity */
-    ierr = DMCreateSubDM(dm, 1, vf, &vis, &vdm);
-    CHKERRQ(ierr);
-    ierr = VecGetSubVector(u, vis, &vel);
-    CHKERRQ(ierr);
-    ierr = DMGetLocalVector(vdm, &locvel);
-    CHKERRQ(ierr);
-    ierr = DMPlexInsertBoundaryValues(vdm, PETSC_TRUE, locvel, particles->timeInitial, NULL, NULL, NULL);
-    CHKERRQ(ierr);
-    ierr = DMGlobalToLocalBegin(vdm, vel, INSERT_VALUES, locvel);
-    CHKERRQ(ierr);
-    ierr = DMGlobalToLocalEnd(vdm, vel, INSERT_VALUES, locvel);
-    CHKERRQ(ierr);
-    ierr = VecRestoreSubVector(u, vis, &vel);
-    CHKERRQ(ierr);
-    ierr = ISDestroy(&vis);
+    ierr = particles->flow->GetSubVector("velocity", &vdm, &locvel, particles->timeInitial);
     CHKERRQ(ierr);
 
     /* Interpolate velocity */
@@ -97,9 +80,7 @@ PetscErrorCode ablate::particles::Tracer::freeStreaming(TS ts, PetscReal t, Vec 
     CHKERRQ(ierr);
     ierr = DMInterpolationDestroy(&ictx);
     CHKERRQ(ierr);
-    ierr = DMRestoreLocalVector(vdm, &locvel);
-    CHKERRQ(ierr);
-    ierr = DMDestroy(&vdm);
+    ierr = particles->flow->RestoreSubVector(&vdm, &locvel);
     CHKERRQ(ierr);
 
     // right hand side storing

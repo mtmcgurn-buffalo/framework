@@ -68,6 +68,24 @@ std::optional<int> ablate::flow::Flow::GetAuxFieldId(const std::string& fieldNam
     return {};
 }
 
+std::optional<int> ablate::flow::Flow::GetFieldId(const char* fieldName) const {
+    for (auto f = 0; f < flowFieldDescriptors.size(); f++) {
+        if (!flowFieldDescriptors[f].fieldName.compare(fieldName)) {  // zero means they are equal
+            return f;
+        }
+    }
+    return {};
+}
+
+std::optional<int> ablate::flow::Flow::GetAuxFieldId(const char* fieldName) const {
+    for (auto f = 0; f < auxFieldDescriptors.size(); f++) {
+        if (!auxFieldDescriptors[f].fieldName.compare(fieldName)) {  // zero means they are equal
+            return f;
+        }
+    }
+    return {};
+}
+
 void ablate::flow::Flow::RegisterField(FlowFieldDescriptor flowFieldDescription) {
     // store the field
     flowFieldDescriptors.push_back(flowFieldDescription);
@@ -336,6 +354,14 @@ void ablate::flow::Flow::CompleteProblemSetup(TS ts) {
             PetscDSSetExactSolutionTimeDerivative(prob, fieldId.value(), exactSolution->GetTimeDerivative().GetPetscFunction(), exactSolution->GetTimeDerivative().GetContext()) >> checkError;
         }
     }
+
+    // Precompute and store the flow and aux fields for fast lookup
+    for (auto f = 0; f < flowFieldDescriptors.size(); f++) {
+        fieldLocations[flowFieldDescriptors[f].fieldName.c_str()] = {.index = f, .dm = dm->GetDomain(), .vec = flowField, .isGlobalVector = true};
+    }
+    for (auto f = 0; f < auxFieldDescriptors.size(); f++) {
+        fieldLocations[auxFieldDescriptors[f].fieldName.c_str()] = {.index = f, .dm = auxDM, .vec = auxField, .isGlobalVector = false};
+    }
 }
 
 /**
@@ -405,4 +431,56 @@ void ablate::flow::Flow::View(PetscViewer viewer, PetscInt steps, PetscReal time
         VecView(auxGlobalField, viewer) >> checkError;
         DMRestoreGlobalVector(auxDM, &auxGlobalField) >> checkError;
     }
+}
+
+PetscErrorCode ablate::flow::Flow::GetSubVector(const char* fieldName, DM* subDM, Vec* locSubVec, PetscReal time) {
+    PetscFunctionBeginUser;
+    // search through
+    if (fieldLocations.count(fieldName) == 0) {
+        SETERRQ(PetscObjectComm((PetscObject)dm->GetDomain()), PETSC_ERR_LIB, "Missing field in flow");
+    }
+    const auto& fieldLocation = fieldLocations[fieldName];
+    PetscInt location = fieldLocation.index;
+
+    // Create a subDomain for only this field
+    IS subIS;
+    PetscErrorCode ierr = DMCreateSubDM(fieldLocation.dm, 1, &location, &subIS, subDM);
+    CHKERRQ(ierr);
+
+    // Get the globSubVector
+    Vec subVector;
+    ierr = VecGetSubVector(fieldLocation.vec, subIS, &subVector);
+    CHKERRQ(ierr);
+
+    ierr = DMGetLocalVector(*subDM, locSubVec);
+    CHKERRQ(ierr);
+
+    if (fieldLocation.isGlobalVector) {
+        // Copy over the values from global to local
+        ierr = DMPlexInsertBoundaryValues(*subDM, PETSC_TRUE, *locSubVec, time, NULL, NULL, NULL);
+        CHKERRQ(ierr);
+        ierr = DMGlobalToLocalBegin(*subDM, subVector, INSERT_VALUES, *locSubVec);
+        CHKERRQ(ierr);
+        ierr = DMGlobalToLocalEnd(*subDM, subVector, INSERT_VALUES, *locSubVec);
+        CHKERRQ(ierr);
+    } else {
+        // just copy the values
+        ierr = VecCopy(subVector, *locSubVec);
+        CHKERRQ(ierr);
+    }
+    ierr = VecRestoreSubVector(fieldLocation.vec, subIS, &subVector);
+    CHKERRQ(ierr);
+    ierr = ISDestroy(&subIS);
+    CHKERRQ(ierr);
+
+    PetscFunctionReturn(0);
+}
+
+PetscErrorCode ablate::flow::Flow::RestoreSubVector(DM* subDM, Vec* locSubVec) {
+    PetscFunctionBeginUser;
+    PetscErrorCode ierr = DMRestoreLocalVector(*subDM, locSubVec);
+    CHKERRQ(ierr);
+    ierr = DMDestroy(subDM);
+    CHKERRQ(ierr);
+    PetscFunctionReturn(0);
 }
