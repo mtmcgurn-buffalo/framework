@@ -58,18 +58,21 @@ void ablate::flow::FVFlow::CompleteProblemSetup(TS ts) {
         for (PetscInt bc = 0; bc < numberBC; bc++) {
             DMBoundaryConditionType type;
             const char* name;
-            const char* labelName;
+            DMLabel label;
             PetscInt field;
             PetscInt numberIds;
             const PetscInt* ids;
+            PetscWeakForm wf;
 
             // Get the boundary
-            PetscDSGetBoundary(flowProblem, bc, &type, &name, &labelName, &field, NULL, NULL, NULL, NULL, &numberIds, &ids, NULL) >> checkError;
+            // PetscErrorCode PetscDSGetBoundary(PetscDS ds, PetscInt bd, PetscWeakForm *wf, DMBoundaryConditionType *type, const char *name[], DMLabel *label, PetscInt *Nv, const PetscInt *values[], PetscInt *field, PetscInt *Nc, const PetscInt *comps[], void (**func)(void), void (**func_t)(void), void **ctx)
+            PetscDSGetBoundary(flowProblem, bc, &wf, &type, &name, &label,&numberIds, &ids, &field, NULL, NULL, NULL, NULL, NULL) >> checkError;
 
             // If this is for euler and DM_BC_NATURAL_RIEMANN add it to the aux
             if (type == DM_BC_NATURAL_RIEMANN && field == 0) {
                 for (PetscInt af = 0; af < numberAuxFields; af++) {
-                    PetscDSAddBoundary(auxProblem, type, name, labelName, af, 0, NULL, NULL, NULL, numberIds, ids, NULL) >> checkError;
+                    // PetscErrorCode PetscDSAddBoundary(PetscDS ds, DMBoundaryConditionType type, const char name[], DMLabel label, PetscInt Nv, const PetscInt values[], PetscInt field, PetscInt Nc, const PetscInt comps[], void (*bcFunc)(void), void (*bcFunc_t)(void), void *ctx, PetscInt *bd)
+                    PetscDSAddBoundary(auxProblem, type, name, label,numberIds, ids, af, 0, NULL, NULL, NULL, NULL, NULL) >> checkError;
                 }
             }
         }

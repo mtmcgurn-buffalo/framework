@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-
+set(CMAKE_VERBOSE_MAKEFILE ON)
 # Set the compilers based upon the PETSc package
 find_package(PkgConfig REQUIRED)
 pkg_get_variable(PETSC_C_COMPILER PETSc ccompiler)

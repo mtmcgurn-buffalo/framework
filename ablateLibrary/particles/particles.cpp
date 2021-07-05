@@ -324,7 +324,7 @@ void ablate::particles::Particles::SwarmMigrate() {
     MPI_Comm comm;
     PetscObjectGetComm((PetscObject)particleTs, &comm) >> checkError;
     PetscInt dmChangedAll;
-    MPIU_Allreduce(&dmChanged, &dmChangedAll, 1, MPIU_INT, MPIU_MAX, comm);
+    MPI_Allreduce(&dmChanged, &dmChangedAll, 1, MPIU_INT, MPIU_MAX, comm);
     this->dmChanged = dmChangedAll == PETSC_TRUE;
 }
 

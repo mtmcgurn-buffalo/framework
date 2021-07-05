@@ -24,18 +24,19 @@ ablate::mathFunctions::PetscFunction ablate::flow::boundaryConditions::Essential
 void *ablate::flow::boundaryConditions::Essential::GetContext() { return this; }
 
 void ablate::flow::boundaryConditions::Essential::SetupBoundary(PetscDS problem, PetscInt fieldId) {
-    PetscDSAddBoundary(problem,
-                       DM_BC_ESSENTIAL,
-                       GetBoundaryName().c_str(),
-                       GetLabelName().c_str(),
-                       fieldId,
-                       0,
-                       NULL,
-                       (void (*)(void))GetBoundaryFunction(),
-                       (void (*)(void))GetBoundaryTimeDerivativeFunction(),
-                       labelIds.size(),
-                       &labelIds[0],
-                       GetContext()) >>
+    PetscDSAddBoundaryByName(problem,
+                             DM_BC_ESSENTIAL,
+                             GetBoundaryName().c_str(),
+                             GetLabelName().c_str(),
+                             labelIds.size(),
+                             &labelIds[0],
+                             fieldId,
+                             0,
+                             NULL,
+                             (void (*)(void))GetBoundaryFunction(),
+                             (void (*)(void))GetBoundaryTimeDerivativeFunction(),
+                             GetContext(),
+                             NULL) >>
         checkError;
 }
 
